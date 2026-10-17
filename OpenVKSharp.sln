@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37502.11 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenVK.Net", "OpenVK.Net\OpenVK.Net.csproj", "{5F706737-4869-4E54-89D9-93D684BCF2C2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenVK.Cmd", "OpenVK.Cmd\OpenVK.Cmd.csproj", "{4CA47B08-D2DF-4F03-ACA4-C46932A1AB52}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5F706737-4869-4E54-89D9-93D684BCF2C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5F706737-4869-4E54-89D9-93D684BCF2C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5F706737-4869-4E54-89D9-93D684BCF2C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5F706737-4869-4E54-89D9-93D684BCF2C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4CA47B08-D2DF-4F03-ACA4-C46932A1AB52}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4CA47B08-D2DF-4F03-ACA4-C46932A1AB52}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4CA47B08-D2DF-4F03-ACA4-C46932A1AB52}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4CA47B08-D2DF-4F03-ACA4-C46932A1AB52}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DD34F129-7012-49DD-8ACE-5C0F84620F10}
+	EndGlobalSection
+EndGlobal
