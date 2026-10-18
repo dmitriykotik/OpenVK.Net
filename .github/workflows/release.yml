@@ -65,6 +65,7 @@ jobs:
     needs: prepare
     if: ${{ needs.prepare.outputs.should_run == 'true' }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -85,6 +86,12 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Restore dependencies
+        run: dotnet restore ./OpenVK.Cmd/OpenVK.Cmd.csproj -r ${{ matrix.rid }}
+
+      - name: Build Library (OpenVK.Net)
+        run: dotnet build ./OpenVK.Net/OpenVK.Net.csproj --configuration ${{ matrix.configuration }}
+
       - name: Publish OpenVK.Cmd
         run: >
           dotnet publish ./OpenVK.Cmd/OpenVK.Cmd.csproj
@@ -93,22 +100,35 @@ jobs:
           --self-contained false
           -o ./publish_output
 
-      - name: Archive artifacts (Unix)
+      - name: Archive CLI (Unix)
         if: runner.os != 'Windows'
         run: |
           cd ./publish_output
           zip -r ../OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip .
 
-      - name: Archive artifacts (Windows)
+      - name: Archive CLI (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           Compress-Archive -Path .\publish_output\* -DestinationPath .\OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload OpenVK.Cmd Artifact
+        uses: actions/upload-artifact@v4
         with:
           name: OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}
           path: ./OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip
+          retention-days: 1
+
+      - name: Pack OpenVK.Net (NuGet package)
+        if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
+        run: dotnet pack ./OpenVK.Net/OpenVK.Net.csproj --configuration Release -o ./nuget_output
+
+      - name: Upload OpenVK.Net Artifact
+        if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenVK.Net-NuGet
+          path: ./nuget_output/*.nupkg
           retention-days: 1
 
   publish_release:
@@ -125,4 +145,6 @@ jobs:
           tag_name: ${{ needs.prepare.outputs.tag }}
           name: Release ${{ needs.prepare.outputs.tag }}
           prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
-          files: ./artifacts/**/*.zip
+          files: |
+            ./artifacts/**/*.zip
+            ./artifacts/**/*.nupkg
