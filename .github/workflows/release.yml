@@ -73,6 +73,8 @@ jobs:
             rid: win-x64
           - os: macos-latest
             rid: osx-x64
+          - os: macos-latest
+            rid: osx-arm64
         configuration: ${{ fromJson(needs.prepare.outputs.configs) }}
     runs-on: ${{ matrix.os }}
 
@@ -83,20 +85,13 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore dependencies
-        run: dotnet restore ./OpenVKSharp.sln
-
-      - name: Build solution
-        run: dotnet build ./OpenVKSharp.sln --configuration ${{ matrix.configuration }} --no-restore
-
       - name: Publish OpenVK.Cmd
-        run: |
-          dotnet publish ./OpenVK.Cmd/OpenVK.Cmd.csproj \
-            --configuration ${{ matrix.configuration }} \
-            -r ${{ matrix.rid }} \
-            --self-contained false \
-            --no-build \
-            -o ./publish_output
+        run: >
+          dotnet publish ./OpenVK.Cmd/OpenVK.Cmd.csproj
+          --configuration ${{ matrix.configuration }}
+          -r ${{ matrix.rid }}
+          --self-contained false
+          -o ./publish_output
 
       - name: Archive artifacts (Unix)
         if: runner.os != 'Windows'
