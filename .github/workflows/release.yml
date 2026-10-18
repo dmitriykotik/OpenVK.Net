@@ -1,0 +1,135 @@
+name: .NET Cross-Platform Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: 'Build channel'
+        required: true
+        default: 'canary'
+        type: choice
+        options:
+          - release
+          - canary
+  schedule:
+    - cron: '0 0 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.setup.outputs.should_run }}
+      channel: ${{ steps.setup.outputs.channel }}
+      configs: ${{ steps.setup.outputs.configs }}
+      tag: ${{ steps.setup.outputs.tag }}
+      is_prerelease: ${{ steps.setup.outputs.is_prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: setup
+        run: |
+          SHOULD_RUN="true"
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            CHANGES=$(git log --oneline --since="24 hours ago")
+            if [ -z "$CHANGES" ]; then
+              SHOULD_RUN="false"
+            fi
+            CHANNEL="canary"
+          else
+            CHANNEL="${{ github.event.inputs.channel }}"
+          fi
+
+          DATE=$(date +'%Y.%m.%d')
+          if [ "$CHANNEL" == "release" ]; then
+            CONFIGS='["Release"]'
+            PRERELEASE="false"
+            TAG="v$DATE-${{ github.run_number }}"
+          else
+            CONFIGS='["Debug", "Release"]'
+            PRERELEASE="true"
+            TAG="canary-$DATE-${{ github.run_number }}"
+          fi
+
+          echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
+          echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
+          echo "configs=$CONFIGS" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+
+  build:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+          - os: macos-latest
+            rid: osx-x64
+          - os: macos-latest
+            rid: osx-arm64
+        configuration: ${{ fromJson(needs.prepare.outputs.configs) }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore ./OpenVKSharp.sln
+
+      - name: Build solution
+        run: dotnet build ./OpenVKSharp.sln --configuration ${{ matrix.configuration }} --no-restore
+
+      - name: Publish OpenVK.Cmd
+        run: |
+          dotnet publish ./OpenVK.Cmd/OpenVK.Cmd.csproj \
+            --configuration ${{ matrix.configuration }} \
+            -r ${{ matrix.rid }} \
+            --self-contained false \
+            --no-build \
+            -o ./publish_output
+
+      - name: Archive artifacts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd ./publish_output
+          zip -r ../OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip .
+
+      - name: Archive artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path .\publish_output\* -DestinationPath .\OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}
+          path: ./OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip
+          retention-days: 1
+
+  publish_release:
+    needs: [prepare, build]
+    if: ${{ needs.prepare.outputs.should_run == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: Release ${{ needs.prepare.outputs.tag }}
+          prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
+          files: ./artifacts/**/*.zip
