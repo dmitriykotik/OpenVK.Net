@@ -65,8 +65,9 @@ jobs:
     needs: prepare
     if: ${{ needs.prepare.outputs.should_run == 'true' }}
     strategy:
-      fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        configuration: ${{ fromJson(needs.prepare.outputs.configs) }}
         include:
           - os: ubuntu-latest
             rid: linux-x64
@@ -74,11 +75,8 @@ jobs:
             rid: win-x64
           - os: macos-latest
             rid: osx-x64
-          - os: macos-latest
-            rid: osx-arm64
-        configuration: ${{ fromJson(needs.prepare.outputs.configs) }}
     runs-on: ${{ matrix.os }}
-
+    
     steps:
       - uses: actions/checkout@v4
 
@@ -86,49 +84,43 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore dependencies
-        run: dotnet restore ./OpenVK.Cmd/OpenVK.Cmd.csproj -r ${{ matrix.rid }}
+      - name: Restore Solution
+        run: dotnet restore ./OpenVKSharp.sln
 
-      - name: Build Library (OpenVK.Net)
-        run: dotnet build ./OpenVK.Net/OpenVK.Net.csproj --configuration ${{ matrix.configuration }}
+      - name: Build Solution
+        run: dotnet build ./OpenVKSharp.sln --configuration ${{ matrix.configuration }} --no-restore
+
+      - name: Publish OpenVK.Net
+        run: dotnet publish ./OpenVK.Net/OpenVK.Net.csproj --configuration ${{ matrix.configuration }} -r ${{ matrix.rid }} --self-contained false -o ./publish_net
 
       - name: Publish OpenVK.Cmd
-        run: >
-          dotnet publish ./OpenVK.Cmd/OpenVK.Cmd.csproj
-          --configuration ${{ matrix.configuration }}
-          -r ${{ matrix.rid }}
-          --self-contained false
-          -o ./publish_output
+        run: dotnet publish ./OpenVK.Cmd/OpenVK.Cmd.csproj --configuration ${{ matrix.configuration }} -r ${{ matrix.rid }} --self-contained false -o ./publish_cmd
 
-      - name: Archive CLI (Unix)
-        if: runner.os != 'Windows'
+      - name: Archive Artifacts (Unix)
+        if: matrix.os != 'windows-latest'
         run: |
-          cd ./publish_output
-          zip -r ../OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip .
+          cd ./publish_net && zip -r ../OpenVK.Net-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip .
+          cd ../publish_cmd && zip -r ../OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip .
 
-      - name: Archive CLI (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
+      - name: Archive Artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: powershell
         run: |
-          Compress-Archive -Path .\publish_output\* -DestinationPath .\OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip
+          Compress-Archive -Path .\publish_net\* -DestinationPath .\OpenVK.Net-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip
+          Compress-Archive -Path .\publish_cmd\* -DestinationPath .\OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip
+
+      - name: Upload OpenVK.Net Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenVK.Net-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}
+          path: ./OpenVK.Net-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip
+          retention-days: 1
 
       - name: Upload OpenVK.Cmd Artifact
         uses: actions/upload-artifact@v4
         with:
           name: OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}
           path: ./OpenVK.Cmd-${{ needs.prepare.outputs.channel }}-${{ matrix.rid }}-${{ matrix.configuration }}.zip
-          retention-days: 1
-
-      - name: Pack OpenVK.Net (NuGet package)
-        if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
-        run: dotnet pack ./OpenVK.Net/OpenVK.Net.csproj --configuration Release -o ./nuget_output
-
-      - name: Upload OpenVK.Net Artifact
-        if: matrix.os == 'ubuntu-latest' && matrix.configuration == 'Release'
-        uses: actions/upload-artifact@v4
-        with:
-          name: OpenVK.Net-NuGet
-          path: ./nuget_output/*.nupkg
           retention-days: 1
 
   publish_release:
@@ -145,6 +137,4 @@ jobs:
           tag_name: ${{ needs.prepare.outputs.tag }}
           name: Release ${{ needs.prepare.outputs.tag }}
           prerelease: ${{ needs.prepare.outputs.is_prerelease == 'true' }}
-          files: |
-            ./artifacts/**/*.zip
-            ./artifacts/**/*.nupkg
+          files: ./artifacts/**/*.zip
